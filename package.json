@@ -1,0 +1,44 @@
+{
+  "name": "lentera-v.2-alhusna-web-school",
+  "version": "1.0.0",
+  "description": "LENTERA (Layanan Edukasi, Nilai, Tugas, Evaluasi, Rapor & Akademik) merupakan Project V.2 dari AlHusna Web School",
+  "private": true,
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "concurrently \"npm run start:dev -w apps/backend\" \"npm run dev -w apps/frontend\"",
+    "dev:backend": "npm run start:dev -w apps/backend",
+    "dev:frontend": "npm run dev -w apps/frontend",
+    "build": "npm run build --workspaces",
+    "build:backend": "npm run build -w apps/backend",
+    "build:frontend": "npm run build -w apps/frontend",
+    "start": "npm run start -w apps/backend",
+    "test": "npm run test --workspaces",
+    "lint": "npm run lint --workspaces",
+    "install:all": "npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cc2jt/LENTERA-V.2-AlHusna-Web-School.git"
+  },
+  "keywords": [
+    "e-learning",
+    "education",
+    "school",
+    "platform"
+  ],
+  "author": "AlHusna Web School",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/cc2jt/LENTERA-V.2-AlHusna-Web-School/issues"
+  },
+  "homepage": "https://github.com/cc2jt/LENTERA-V.2-AlHusna-Web-School#readme",
+  "dependencies": {
+    "dompurify": "^3.4.13"
+  }
+}
