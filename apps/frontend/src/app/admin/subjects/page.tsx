@@ -340,7 +340,16 @@ export default function SubjectManagementPage() {
                   <div className="text-sm text-[var(--muted)]">Belum ada materi pelajaran.</div>
                 ) : (
                   lessons.map((lesson) => (
-                    <div key={lesson.id} className="rounded-lg border border-[var(--border)] p-3">
+                    <div
+                      key={lesson.id}
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => startEditingLesson(lesson)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' || event.key === ' ') startEditingLesson(lesson);
+                      }}
+                      className="cursor-pointer rounded-lg border border-[var(--border)] p-3 transition hover:border-cyan-400/60 hover:bg-cyan-400/5"
+                    >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0">
                           <div className="font-medium text-[var(--foreground)]">{lesson.title}</div>
@@ -348,7 +357,7 @@ export default function SubjectManagementPage() {
                           {lesson.source && (
                             <button
                               type="button"
-                              onClick={() => setYoutubePlayer({ title: lesson.title, url: lesson.source })}
+                              onClick={(event) => { event.stopPropagation(); setYoutubePlayer({ title: lesson.title, url: lesson.source }); }}
                               className="mt-2 inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 text-xs font-semibold text-cyan-700 shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-400 hover:bg-cyan-400/20"
                               aria-label={`Putar video ${lesson.title}`}
                             >
@@ -357,15 +366,15 @@ export default function SubjectManagementPage() {
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={() => startEditingLesson(lesson)}>
+                          <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={(event) => { event.stopPropagation(); startEditingLesson(lesson); }}>
                             Edit
                           </Button>
                           {lesson.fileId && (
-                            <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={() => void openPreview(lesson)} aria-label={`Buka PDF ${lesson.title}`}>
+                            <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={(event) => { event.stopPropagation(); void openPreview(lesson); }} aria-label={`Buka PDF ${lesson.title}`}>
                               <span aria-hidden="true">↗</span> PDF
                             </Button>
                           )}
-                          <Button type="button" variant="danger" className="px-2 py-1 text-xs" onClick={() => void handleDeleteLesson(lesson.id)}>
+                          <Button type="button" variant="danger" className="px-2 py-1 text-xs" onClick={(event) => { event.stopPropagation(); void handleDeleteLesson(lesson.id); }}>
                             Hapus
                           </Button>
                         </div>
@@ -382,8 +391,8 @@ export default function SubjectManagementPage() {
 
       {previewLesson && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="flex h-[min(90vh,820px)] w-[min(94vw,1180px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
+          <div className="flex h-[min(94vh,900px)] w-[min(98vw,1500px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--foreground)]">PDF Preview</h3>
                 <p className="text-sm text-[var(--muted)]">{previewLesson.title}</p>
@@ -396,7 +405,7 @@ export default function SubjectManagementPage() {
                 ×
               </button>
             </div>
-            <div className="min-h-0 flex-1 bg-[var(--background)] p-3">
+            <div className="min-h-0 flex-1 bg-[var(--background)] p-1">
               <iframe
                 src={previewLesson.url}
                 title={previewLesson.title}
@@ -409,8 +418,8 @@ export default function SubjectManagementPage() {
 
       {youtubePlayer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="flex h-[min(90vh,760px)] w-[min(94vw,1100px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
-            <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
+          <div className="flex h-[min(88vh,760px)] w-[min(98vw,1400px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+            <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--foreground)]">YouTube Video</h3>
                 <p className="text-sm text-[var(--muted)]">{youtubePlayer.title}</p>
@@ -423,7 +432,7 @@ export default function SubjectManagementPage() {
                 ×
               </button>
             </div>
-            <div className="min-h-0 flex-1 bg-[var(--background)] p-3">
+            <div className="min-h-0 flex-1 bg-[var(--background)] p-1">
               {extractYoutubeId(youtubePlayer.url) ? (
                 <iframe
                   src={`https://www.youtube.com/embed/${extractYoutubeId(youtubePlayer.url)}`}
