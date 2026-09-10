@@ -4,6 +4,7 @@ import { PassportModule } from '@nestjs/passport';
 import { JwtModule } from '@nestjs/jwt';
 import * as dotenv from 'dotenv';
 import * as path from 'path';
+import 'pg';
 import { Sequelize } from 'sequelize-typescript';
 import { AuthController } from './controllers/auth.controller';
 import { AdminController } from './controllers/admin.controller';
