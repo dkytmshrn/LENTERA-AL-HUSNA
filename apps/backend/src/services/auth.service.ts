@@ -1048,20 +1048,20 @@ export class AuthService {
         throw new BadRequestException('Only PDF files are allowed');
       }
 
-      // Delete old file if exists
-      if (item.fileId) {
-        await this.gcsService.deleteFile(item.fileId);
-      }
-
       const uploadResult = await this.gcsService.uploadFile(
         file.buffer,
         file.originalname,
         file.mimetype,
       );
 
+      const previousFileId = item.fileId;
       item.fileId = uploadResult.fileId;
       item.fileSizeBytes = uploadResult.fileSizeBytes;
       item.originalFileName = file.originalname;
+
+      if (previousFileId) {
+        await this.gcsService.deleteFile(previousFileId);
+      }
     }
 
     // Ensure lesson has either source (YouTube link) or file (PDF)

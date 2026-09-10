@@ -13,12 +13,12 @@ export function Button({
   className,
   ...props 
 }: ButtonProps) {
-  const baseClasses = 'px-4 py-2 rounded-lg font-semibold transition disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2';
+  const baseClasses = 'inline-flex items-center justify-center gap-2 rounded-lg border px-4 py-2 font-semibold tracking-wide transition duration-200 disabled:cursor-not-allowed disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-cyan-400 focus:ring-offset-2 hover:-translate-y-0.5';
 
   const variantClasses = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700 shadow-sm',
-    secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300',
-    danger: 'bg-red-600 text-white hover:bg-red-700',
+    primary: 'border-cyan-400/50 bg-cyan-400 text-slate-950 shadow-[0_0_18px_rgba(34,211,238,0.18)] hover:bg-cyan-300',
+    secondary: 'border-slate-300/70 bg-slate-100 text-slate-800 hover:border-cyan-400/60 hover:bg-cyan-50',
+    danger: 'border-rose-400/50 bg-rose-500 text-white shadow-[0_0_18px_rgba(244,63,94,0.16)] hover:bg-rose-400',
   };
 
   return (

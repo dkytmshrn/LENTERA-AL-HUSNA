@@ -17,6 +17,11 @@ interface LessonFormState {
   file?: File | null;
 }
 
+interface ExistingLessonFile {
+  name?: string;
+  size?: number;
+}
+
 export default function SubjectManagementPage() {
   const { isAuthenticated } = useProtectedRoute();
   const [curriculums, setCurriculums] = useState<CurriculumItem[]>([]);
@@ -32,6 +37,7 @@ export default function SubjectManagementPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const [existingLessonFile, setExistingLessonFile] = useState<ExistingLessonFile | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [previewLesson, setPreviewLesson] = useState<{ lessonId: string; title: string; url: string } | null>(null);
   const [youtubePlayer, setYoutubePlayer] = useState<{ title: string; url: string } | null>(null);
@@ -146,6 +152,7 @@ export default function SubjectManagementPage() {
       }
       setLessonForm({ title: '', source: '', description: '', week: '', file: null });
       setEditingLessonId(null);
+      setExistingLessonFile(null);
       setFileInputKey((key) => key + 1);
       setAlert({ type: 'success', message: editingLessonId ? 'Lesson updated successfully.' : 'Lesson added successfully.' });
       await loadSubjectDetails(selectedSubjectId);
@@ -165,12 +172,14 @@ export default function SubjectManagementPage() {
       week: lesson.week || '',
       file: null,
     });
+    setExistingLessonFile(lesson.fileId ? { name: lesson.originalFileName, size: lesson.fileSizeBytes } : null);
     setFileInputKey((key) => key + 1);
     setAlert(null);
   };
 
   const cancelEditingLesson = () => {
     setEditingLessonId(null);
+    setExistingLessonFile(null);
     setLessonForm({ title: '', source: '', description: '', week: '', file: null });
     setFileInputKey((key) => key + 1);
   };
@@ -313,6 +322,12 @@ export default function SubjectManagementPage() {
                         <button type="button" onClick={() => { setLessonForm((prev) => ({ ...prev, file: null })); setFileInputKey((key) => key + 1); }} className="font-semibold text-red-600 hover:underline">Hapus file</button>
                       </div>
                     )}
+                    {editingLessonId && existingLessonFile && !lessonForm.file && (
+                      <div className="mt-2 flex items-center gap-2 text-xs text-cyan-700">
+                        <span aria-hidden="true">PDF</span>
+                        <span>File tersimpan: {existingLessonFile.name || 'Dokumen PDF'}{existingLessonFile.size ? ` (${(existingLessonFile.size / 1024 / 1024).toFixed(2)}MB)` : ''}</span>
+                      </div>
+                    )}
                   </div>
                   <div className="mt-1 text-xs text-[var(--muted)]">
                     Ukuran maksimal: 10MB. Hanya file PDF yang diperbolehkan.
@@ -366,9 +381,6 @@ export default function SubjectManagementPage() {
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
-                          <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={(event) => { event.stopPropagation(); startEditingLesson(lesson); }}>
-                            Edit
-                          </Button>
                           {lesson.fileId && (
                             <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={(event) => { event.stopPropagation(); void openPreview(lesson); }} aria-label={`Buka PDF ${lesson.title}`}>
                               <span aria-hidden="true">↗</span> PDF
