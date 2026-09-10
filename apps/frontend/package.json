@@ -9,6 +9,7 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "dompurify": "^3.4.13",
     "katex": "^0.18.4",
     "next": "16.3.0",
     "react": "19.2.8",
