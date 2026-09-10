@@ -1,4 +1,4 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 // Track if we're currently refreshing to prevent multiple simultaneous refresh requests
 let isRefreshing = false;

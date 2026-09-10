@@ -68,7 +68,7 @@ export function TopNav() {
 
   const handleLogout = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/auth/logout`, {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || '/api'}/auth/logout`, {
         method: 'POST',
         credentials: 'include',
       });
