@@ -19,6 +19,7 @@ async function bootstrap() {
     origin: [
       'http://localhost:3000',
       'http://127.0.0.1:3000',
+      'https://lenteraalhusna-git-main-sexy-cc.vercel.app',
       process.env.FRONTEND_URL || 'http://localhost:3000',
     ].filter((value, index, self) => value && self.indexOf(value) === index),
     credentials: true,
