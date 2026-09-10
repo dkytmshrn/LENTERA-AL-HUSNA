@@ -3,6 +3,7 @@ export declare class GcsService {
     private bucketName;
     private maxFileSizeBytes;
     private maxTotalStorageBytes;
+    private normalizePrivateKey;
     constructor();
     private buildObjectPath;
     uploadFile(fileBuffer: Buffer, originalFileName: string, mimeType: string, folder?: string, extension?: string): Promise<{

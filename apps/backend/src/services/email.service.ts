@@ -96,6 +96,26 @@ export class EmailService {
     );
   }
 
+  async sendAdminApprovalOTPEmail(email: string, otp: string, name: string): Promise<boolean> {
+    return this.sendMailWithFallback(
+      email,
+      'TU Badge Approval OTP - LENTERA E-School',
+      `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <div style="background-color: #fff7ed; padding: 20px; border-radius: 8px;">
+            <h2 style="color: #9a3412;">TU badge approval confirmation</h2>
+            <p style="color: #444; font-size: 16px;">Hello ${name}, use this OTP to approve the TU badge assignment:</p>
+            <div style="background-color: #ea580c; color: white; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+              <p style="font-size: 32px; font-weight: bold; margin: 0; letter-spacing: 5px;">${otp}</p>
+            </div>
+            <p style="color: #666; font-size: 14px;">This OTP expires in 10 minutes.</p>
+          </div>
+        </div>
+      `,
+      'TU badge approval',
+    );
+  }
+
   async sendTemporaryPasswordEmail(
     email: string,
     temporaryPassword: string,

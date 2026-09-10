@@ -11,14 +11,36 @@ export class GcsService {
   private maxFileSizeBytes: number;
   private maxTotalStorageBytes: number;
 
+  private normalizePrivateKey(value?: string): string | undefined {
+    if (!value) {
+      return undefined;
+    }
+
+    let privateKey = value.trim();
+    if ((privateKey.startsWith('"') && privateKey.endsWith('"')) || (privateKey.startsWith("'") && privateKey.endsWith("'"))) {
+      privateKey = privateKey.slice(1, -1);
+    }
+
+    privateKey = privateKey
+      .replace(/\\n/g, '\n')
+      .replace(/\\r/g, '')
+      .replace(/\r/g, '');
+
+    if (!privateKey.includes('-----BEGIN PRIVATE KEY-----') || !privateKey.includes('-----END PRIVATE KEY-----')) {
+      throw new Error('GCS_PRIVATE_KEY is not a complete PEM private key');
+    }
+
+    return privateKey;
+  }
+
   constructor() {
     this.bucketName = process.env.GCS_BUCKET_NAME || 'lentera-lesson-files';
     this.maxFileSizeBytes = (Number(process.env.MAX_FILE_SIZE_MB) || 10) * 1024 * 1024;
     this.maxTotalStorageBytes = (Number(process.env.MAX_TOTAL_STORAGE_GB) || 4.9) * 1024 * 1024 * 1024;
 
     try {
-      const clientEmail = process.env.GCS_CLIENT_EMAIL;
-      const privateKey = process.env.GCS_PRIVATE_KEY?.replace(/\\n/g, '\n');
+      const clientEmail = process.env.GCS_CLIENT_EMAIL?.trim();
+      const privateKey = this.normalizePrivateKey(process.env.GCS_PRIVATE_KEY);
 
       this.storage = clientEmail && privateKey
         ? new Storage({

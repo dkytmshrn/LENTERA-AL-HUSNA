@@ -150,6 +150,18 @@ __decorate([
     __metadata("design:type", Boolean)
 ], RegistrationRequest.prototype, "emailVerified", void 0);
 __decorate([
+    (0, sequelize_typescript_1.Column)({
+        type: sequelize_typescript_1.DataType.STRING(255),
+    }),
+    __metadata("design:type", String)
+], RegistrationRequest.prototype, "approvalOtpHash", void 0);
+__decorate([
+    (0, sequelize_typescript_1.Column)({
+        type: sequelize_typescript_1.DataType.DATE,
+    }),
+    __metadata("design:type", Date)
+], RegistrationRequest.prototype, "approvalOtpExpiresAt", void 0);
+__decorate([
     sequelize_typescript_1.CreatedAt,
     __metadata("design:type", Date)
 ], RegistrationRequest.prototype, "createdAt", void 0);

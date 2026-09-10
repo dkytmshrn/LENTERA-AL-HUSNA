@@ -46,6 +46,7 @@ module.exports = {
       phoneNumber: {
         type: Sequelize.STRING(20),
         allowNull: true,
+        unique: true,
       },
       parentName: {
         type: Sequelize.STRING(255),

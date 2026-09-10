@@ -27,6 +27,7 @@ export default function UserManagementPage() {
   const [pageSize] = useState(10);
   const [selectedUser, setSelectedUser] = useState<UserAdminItem | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+  const [deleteCandidate, setDeleteCandidate] = useState<UserAdminItem | null>(null);
   const [showRoleModal, setShowRoleModal] = useState(false);
   const [selectedBadges, setSelectedBadges] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -179,14 +180,12 @@ export default function UserManagementPage() {
     updateDisabledBadges(newBadges);
   };
 
-  const handleDeleteUser = async (userId: string) => {
-    if (!confirm('Are you sure you want to delete this user? This action cannot be undone.')) {
-      return;
-    }
-
+  const handleDeleteUser = async () => {
+    if (!deleteCandidate) return;
     try {
-      await authApi.admin.deleteUser(userId);
+      await authApi.admin.deleteUser(deleteCandidate.id);
       setAlert({ type: 'success', message: 'User deleted successfully' });
+      setDeleteCandidate(null);
       fetchUsers();
     } catch (error: any) {
       setAlert({
@@ -307,7 +306,7 @@ export default function UserManagementPage() {
                           Lihat
                         </button>
                         <button
-                          onClick={() => handleDeleteUser(user.id)}
+                          onClick={() => setDeleteCandidate(user)}
                           className="px-3 py-1 bg-red-600 text-white rounded hover:bg-red-700 transition text-xs font-medium"
                         >
                           Hapus
@@ -363,6 +362,31 @@ export default function UserManagementPage() {
       </div>
 
       {/* User Detail Modal */}
+      {deleteCandidate && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-[var(--surface)] rounded-lg shadow-lg p-6 max-w-md w-full border border-[var(--border)]">
+            <h2 className="text-xl font-bold text-[var(--foreground)] mb-3">Hapus pengguna?</h2>
+            <p className="text-sm text-[var(--muted)] mb-6">
+              Pengguna <strong>{deleteCandidate.fullName}</strong> akan dihapus permanen. Tindakan ini tidak dapat dibatalkan.
+            </p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setDeleteCandidate(null)}
+                className="flex-1 px-4 py-2 bg-[var(--border)] text-[var(--foreground)] rounded hover:bg-opacity-80 transition font-medium text-sm"
+              >
+                Batal
+              </button>
+              <button
+                onClick={handleDeleteUser}
+                className="flex-1 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 transition font-medium text-sm"
+              >
+                Hapus permanen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showDetailModal && selectedUser && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-[var(--surface)] rounded-lg shadow-lg p-6 max-w-md w-full border border-[var(--border)]">

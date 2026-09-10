@@ -434,11 +434,12 @@ export const authApi = {
       const suffix = query.toString() ? `?${query.toString()}` : '';
       return apiCall<UserAdminItem[] | PaginatedUsersResponse>(`/admin/users${suffix}`, 'GET');
     },
-    approveRegistration: (email: string, assignedRole?: string, assignedBadge?: string) =>
+    approveRegistration: (email: string, assignedRole?: string, assignedBadge?: string, mfaCode?: string) =>
       apiCall('/admin/approve-registration', 'POST', {
         email,
         ...(assignedRole ? { assignedRole } : {}),
         ...(assignedBadge ? { assignedBadge } : {}),
+        ...(mfaCode ? { mfaCode } : {}),
       }),
     rejectRegistration: (email: string, rejectionReason: string) =>
       apiCall('/admin/reject-registration', 'POST', {

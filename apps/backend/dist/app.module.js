@@ -46,6 +46,7 @@ const passport_1 = require("@nestjs/passport");
 const jwt_1 = require("@nestjs/jwt");
 const dotenv = __importStar(require("dotenv"));
 const path = __importStar(require("path"));
+require("pg");
 const sequelize_typescript_1 = require("sequelize-typescript");
 const auth_controller_1 = require("./controllers/auth.controller");
 const admin_controller_1 = require("./controllers/admin.controller");

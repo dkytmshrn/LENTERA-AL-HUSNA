@@ -107,7 +107,7 @@ export class AuthService {
     return validLatestRequest ?? null;
   }
 
-  private async pruneDuplicatePendingRegistrationRequests(email: string, keepRequestId?: string) {
+  private async pruneDuplicatePendingRegistrationRequests(email: string, keepRequestId?: string, transaction?: any) {
     const pendingRequests = await RegistrationRequest.findAll({
       where: {
         email,
@@ -132,6 +132,7 @@ export class AuthService {
             [Op.in]: idsToDelete,
           },
         },
+        ...(transaction ? { transaction } : {}),
       });
     }
   }
@@ -1927,6 +1928,14 @@ export class AuthService {
       throw new ConflictException('Email already registered.');
     }
 
+    const phoneNumber = registerDto.phoneNumber?.trim();
+    if (phoneNumber) {
+      const existingPhone = await Account.findOne({ where: { phoneNumber } });
+      if (existingPhone) {
+        throw new ConflictException('This phone number is already registered.');
+      }
+    }
+
     const existingRequest = await this.getPendingRegistrationRequestByEmail(email);
     if (existingRequest) {
       const requestStatus = existingRequest.status;
@@ -1943,19 +1952,27 @@ export class AuthService {
       }
 
       const otp = PasswordUtil.generateOTP();
-    const otpHash = await PasswordUtil.hashPassword(otp);
+      const otpHash = await PasswordUtil.hashPassword(otp);
+      const transaction = typeof this.sequelize?.transaction === 'function'
+        ? await this.sequelize.transaction()
+        : undefined;
 
-    await this.pruneDuplicatePendingRegistrationRequests(email, existingRequest.id);
+      try {
+        await this.pruneDuplicatePendingRegistrationRequests(email, existingRequest.id, transaction);
+        await existingRequest.update({
+          verificationCode: otpHash,
+          otpResendCount: Number(existingRequest.otpResendCount ?? 0) + 1,
+          lastOtpSentAt: new Date(),
+          status: RegistrationStatus.PENDING,
+          emailVerified: false,
+        }, transaction ? { transaction } : undefined);
 
-    await existingRequest.update({
-      verificationCode: otpHash,
-      otpResendCount: Number(existingRequest.otpResendCount ?? 0) + 1,
-      lastOtpSentAt: new Date(),
-      status: RegistrationStatus.PENDING,
-      emailVerified: false,
-    });
-
-      const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
+        const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
+        if (!otpSent) {
+          throw new BadRequestException(
+            'Unable to send verification email at the moment. Please try again later.',
+          );
+        }
 
       const response: any = {
         message: 'Registration request submitted. Please verify your email.',
@@ -1970,33 +1987,37 @@ export class AuthService {
           'Registration request submitted. Use the verification code below in development mode.';
       }
 
-      if (!otpSent) {
-        if (process.env.NODE_ENV !== 'production') {
-          return response;
-        }
-
-        throw new BadRequestException(
-          'Unable to send verification email at the moment. Please try again later.',
-        );
+        await transaction?.commit();
+        return response;
+      } catch (error) {
+        await transaction?.rollback();
+        throw error;
       }
-
-      return response;
     }
 
     const otp = PasswordUtil.generateOTP();
     const otpHash = await PasswordUtil.hashPassword(otp);
 
     try {
-      const registrationRequest = await RegistrationRequest.create({
-        ...registerDto,
-        email,
-        verificationCode: otpHash,
-        status: RegistrationStatus.PENDING,
-        otpResendCount: 0,
-        lastOtpSentAt: new Date(),
-      });
+      const transaction = typeof this.sequelize?.transaction === 'function'
+        ? await this.sequelize.transaction()
+        : undefined;
+      try {
+        const registrationRequest = await RegistrationRequest.create({
+          ...registerDto,
+          email,
+          verificationCode: otpHash,
+          status: RegistrationStatus.PENDING,
+          otpResendCount: 0,
+          lastOtpSentAt: new Date(),
+        }, transaction ? { transaction } : undefined);
 
-      const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
+        const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
+        if (!otpSent) {
+          throw new BadRequestException(
+            'Unable to send verification email at the moment. Please try again later.',
+          );
+        }
 
       const response: any = {
         message: 'Registration request submitted. Please verify your email.',
@@ -2011,20 +2032,18 @@ export class AuthService {
           'Registration request submitted. Use the verification code below in development mode.';
       }
 
-      if (!otpSent) {
-        if (process.env.NODE_ENV !== 'production') {
-          return response;
+        await transaction?.commit();
+        return response;
+      } catch (error: any) {
+        await transaction?.rollback();
+        if (error?.name === 'SequelizeUniqueConstraintError') {
+          throw new ConflictException('This email or phone number is already registered.');
         }
-
-        throw new BadRequestException(
-          'Unable to send verification email at the moment. Please try again later.',
-        );
+        throw error;
       }
-
-      return response;
     } catch (error: any) {
       if (error?.name === 'SequelizeUniqueConstraintError') {
-        throw new ConflictException('This email already has an active registration request.');
+        throw new ConflictException('This email or phone number is already registered.');
       }
 
       throw error;
@@ -2066,25 +2085,24 @@ export class AuthService {
     const otp = PasswordUtil.generateOTP();
     const otpHash = await PasswordUtil.hashPassword(otp);
 
-    await registrationRequest.update({
-      verificationCode: otpHash,
-      otpResendCount: attemptCount + 1,
-      lastOtpSentAt: new Date(),
-    });
+    const transaction = typeof this.sequelize?.transaction === 'function'
+      ? await this.sequelize.transaction()
+      : undefined;
+    try {
+      const otpSent = await this.emailService.sendOTPEmail(normalizedEmail, otp, registrationRequest.name);
+      if (!otpSent) {
+        throw new BadRequestException('Unable to send a new verification email right now. Please try again later.');
+      }
 
-    const otpSent = await this.emailService.sendOTPEmail(normalizedEmail, otp, registrationRequest.name);
-
-    if (process.env.NODE_ENV !== 'production') {
-      return {
-        message: 'A new OTP was generated. Use the code below in development mode.',
-        email: normalizedEmail,
-        verificationCode: otp,
-        cooldownSeconds: Math.ceil(this.getResendDelayMs(attemptCount + 1) / 1000),
-      };
-    }
-
-    if (!otpSent && process.env.NODE_ENV === 'production') {
-      throw new BadRequestException('Unable to send a new verification email right now. Please try again later.');
+      await registrationRequest.update({
+        verificationCode: otpHash,
+        otpResendCount: attemptCount + 1,
+        lastOtpSentAt: new Date(),
+      }, transaction ? { transaction } : undefined);
+      await transaction?.commit();
+    } catch (error) {
+      await transaction?.rollback();
+      throw error;
     }
 
     return {
@@ -2224,7 +2242,7 @@ export class AuthService {
     approveDto: ApproveRegistrationDto,
     adminId: string,
   ): Promise<any> {
-    const { email, assignedRole, assignedBadge } = approveDto;
+    const { email, assignedRole, assignedBadge, mfaCode } = approveDto;
     const normalizedAssignedRole =
       typeof assignedRole === 'string' ? assignedRole.trim() || undefined : assignedRole;
     const resolvedRole = this.getRoleFromBadge(
@@ -2244,49 +2262,102 @@ export class AuthService {
       throw new BadRequestException('Email must be verified first');
     }
 
+    const hasTuBadge = (assignedBadge || '').split(',').map((badge) => badge.trim()).includes('TU');
+    if (hasTuBadge) {
+      const admin = await Account.findByPk(adminId);
+      if (!admin) {
+        throw new NotFoundException('Approving administrator not found');
+      }
+
+      if (!mfaCode) {
+        const otp = PasswordUtil.generateOTP(6);
+        const otpHash = await PasswordUtil.hashPassword(otp);
+        const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+        const otpSent = await this.emailService.sendAdminApprovalOTPEmail(
+          admin.email,
+          otp,
+          admin.fullName || admin.name,
+        );
+        if (!otpSent) {
+          throw new BadRequestException('Unable to send the TU approval OTP. Please try again later.');
+        }
+        await registrationRequest.update({ approvalOtpHash: otpHash, approvalOtpExpiresAt: otpExpiresAt });
+        return {
+          message: 'Approval OTP sent to the administrator email.',
+          requiresMFA: true,
+          mfaExpiration: otpExpiresAt,
+        };
+      }
+
+      if (!registrationRequest.approvalOtpHash || !registrationRequest.approvalOtpExpiresAt) {
+        throw new BadRequestException('Request an approval OTP before continuing.');
+      }
+      if (new Date(registrationRequest.approvalOtpExpiresAt) < new Date()) {
+        throw new BadRequestException('Approval OTP has expired. Request a new OTP.');
+      }
+      if (!(await PasswordUtil.comparePassword(mfaCode.trim(), registrationRequest.approvalOtpHash))) {
+        throw new UnauthorizedException('Invalid approval OTP.');
+      }
+    }
+
     // Generate temporary password
     const temporaryPassword = PasswordUtil.generateTemporaryPassword();
     const hashedPassword = await PasswordUtil.hashPassword(temporaryPassword);
 
     // Create account with temporary password
-    const account = await Account.create({
-      name: registrationRequest.name,
-      fullName: registrationRequest.fullName,
-      email: registrationRequest.email,
-      phoneNumber: registrationRequest.phoneNumber,
-      birthday: registrationRequest.birthday,
-      gender: registrationRequest.gender,
-      parentName: registrationRequest.parentName,
-      password: hashedPassword,
-      role: resolvedRole,
-      badge: assignedBadge,
-      status: AccountStatus.PENDING, // Not fully active until password changed
-    });
+    const transaction = typeof this.sequelize?.transaction === 'function'
+      ? await this.sequelize.transaction()
+      : undefined;
+    let account: Account;
+    let temporaryPasswordSent: boolean;
+    try {
+      const accountData = {
+        name: registrationRequest.name,
+        fullName: registrationRequest.fullName,
+        email: registrationRequest.email,
+        phoneNumber: registrationRequest.phoneNumber,
+        birthday: registrationRequest.birthday,
+        gender: registrationRequest.gender,
+        parentName: registrationRequest.parentName,
+        password: hashedPassword,
+        role: resolvedRole,
+        badge: assignedBadge,
+        status: AccountStatus.PENDING,
+      };
+      account = transaction
+        ? await Account.create(accountData, { transaction })
+        : await Account.create(accountData);
 
-    // Update registration request
-    await registrationRequest.update({
-      status: RegistrationStatus.APPROVED,
-      assignedRole: resolvedRole,
-      assignedBadge,
-      approvedBy: adminId,
-      approvedAt: new Date(),
-    });
+      await registrationRequest.update({
+        status: RegistrationStatus.APPROVED,
+        assignedRole: resolvedRole,
+        assignedBadge,
+        approvedBy: adminId,
+        approvedAt: new Date(),
+        approvalOtpHash: null,
+        approvalOtpExpiresAt: null,
+      }, transaction ? { transaction } : undefined);
 
-    // Send temporary password email
-    const temporaryPasswordSent = await this.emailService.sendTemporaryPasswordEmail(
-      email,
-      temporaryPassword,
-      registrationRequest.fullName,
-    );
-
-    if (!temporaryPasswordSent && process.env.NODE_ENV === 'production') {
-      throw new BadRequestException(
-        'Registration was approved, but the temporary password email could not be sent. Please contact support.',
+      temporaryPasswordSent = await this.emailService.sendTemporaryPasswordEmail(
+        email,
+        temporaryPassword,
+        registrationRequest.fullName,
       );
-    }
+      if (!temporaryPasswordSent) {
+        throw new BadRequestException(
+          'Registration was not completed because the temporary password email could not be sent.',
+        );
+      }
 
-    // Delete the registration request after successful approval
-    await registrationRequest.destroy();
+      await registrationRequest.destroy(transaction ? { transaction } : undefined);
+      await transaction?.commit();
+    } catch (error: any) {
+      await transaction?.rollback();
+      if (error?.name === 'SequelizeUniqueConstraintError') {
+        throw new ConflictException('This email or phone number is already registered.');
+      }
+      throw error;
+    }
 
     return {
       message: temporaryPasswordSent
@@ -2310,12 +2381,6 @@ export class AuthService {
       throw new NotFoundException('Registration request not found');
     }
 
-    // Update registration request
-    await registrationRequest.update({
-      status: RegistrationStatus.REJECTED,
-      rejectionReason,
-    });
-
     // Send rejection email
     const rejectionEmailSent = await this.emailService.sendRegistrationRejectionEmail(
       email,
@@ -2323,19 +2388,29 @@ export class AuthService {
       rejectionReason,
     );
 
-    if (!rejectionEmailSent && process.env.NODE_ENV === 'production') {
+    if (!rejectionEmailSent) {
       throw new BadRequestException(
         'Registration was rejected, but the notification email could not be sent.',
       );
     }
 
-    // Delete the registration request after rejection
-    await registrationRequest.destroy();
+    const transaction = typeof this.sequelize?.transaction === 'function'
+      ? await this.sequelize.transaction()
+      : undefined;
+    try {
+      await registrationRequest.update({
+        status: RegistrationStatus.REJECTED,
+        rejectionReason,
+      }, transaction ? { transaction } : undefined);
+      await registrationRequest.destroy(transaction ? { transaction } : undefined);
+      await transaction?.commit();
+    } catch (error) {
+      await transaction?.rollback();
+      throw error;
+    }
 
     return {
-      message: rejectionEmailSent
-        ? 'Registration rejected. Notification sent to user.'
-        : 'Registration rejected. Notification could not be delivered but the rejection was recorded.',
+      message: 'Registration rejected. Notification sent to user.',
     };
   }
 

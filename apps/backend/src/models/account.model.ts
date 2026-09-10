@@ -90,6 +90,7 @@ export class Account extends Model {
   })
   declare password: string;
 
+  @Unique
   @Column({
     type: DataType.STRING(20),
   })

@@ -131,7 +131,7 @@ let AuthService = class AuthService {
         });
         return validLatestRequest ?? null;
     }
-    async pruneDuplicatePendingRegistrationRequests(email, keepRequestId) {
+    async pruneDuplicatePendingRegistrationRequests(email, keepRequestId, transaction) {
         const pendingRequests = await registration_request_model_1.RegistrationRequest.findAll({
             where: {
                 email,
@@ -153,6 +153,7 @@ let AuthService = class AuthService {
                         [sequelize_1.Op.in]: idsToDelete,
                     },
                 },
+                ...(transaction ? { transaction } : {}),
             });
         }
     }
@@ -1711,6 +1712,13 @@ let AuthService = class AuthService {
         if (existingAccount) {
             throw new common_1.ConflictException('Email already registered.');
         }
+        const phoneNumber = registerDto.phoneNumber?.trim();
+        if (phoneNumber) {
+            const existingPhone = await account_model_1.Account.findOne({ where: { phoneNumber } });
+            if (existingPhone) {
+                throw new common_1.ConflictException('This phone number is already registered.');
+            }
+        }
         const existingRequest = await this.getPendingRegistrationRequestByEmail(email);
         if (existingRequest) {
             const requestStatus = existingRequest.status;
@@ -1723,68 +1731,85 @@ let AuthService = class AuthService {
             }
             const otp = password_util_1.PasswordUtil.generateOTP();
             const otpHash = await password_util_1.PasswordUtil.hashPassword(otp);
-            await this.pruneDuplicatePendingRegistrationRequests(email, existingRequest.id);
-            await existingRequest.update({
-                verificationCode: otpHash,
-                otpResendCount: Number(existingRequest.otpResendCount ?? 0) + 1,
-                lastOtpSentAt: new Date(),
-                status: registration_request_model_1.RegistrationStatus.PENDING,
-                emailVerified: false,
-            });
-            const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
-            const response = {
-                message: 'Registration request submitted. Please verify your email.',
-                registrationId: existingRequest.id,
-                registrationRequestId: existingRequest.id,
-                email: existingRequest.email,
-            };
-            if (process.env.NODE_ENV !== 'production') {
-                response.verificationCode = otp;
-                response.message =
-                    'Registration request submitted. Use the verification code below in development mode.';
-            }
-            if (!otpSent) {
-                if (process.env.NODE_ENV !== 'production') {
-                    return response;
+            const transaction = typeof this.sequelize?.transaction === 'function'
+                ? await this.sequelize.transaction()
+                : undefined;
+            try {
+                await this.pruneDuplicatePendingRegistrationRequests(email, existingRequest.id, transaction);
+                await existingRequest.update({
+                    verificationCode: otpHash,
+                    otpResendCount: Number(existingRequest.otpResendCount ?? 0) + 1,
+                    lastOtpSentAt: new Date(),
+                    status: registration_request_model_1.RegistrationStatus.PENDING,
+                    emailVerified: false,
+                }, transaction ? { transaction } : undefined);
+                const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
+                if (!otpSent) {
+                    throw new common_1.BadRequestException('Unable to send verification email at the moment. Please try again later.');
                 }
-                throw new common_1.BadRequestException('Unable to send verification email at the moment. Please try again later.');
+                const response = {
+                    message: 'Registration request submitted. Please verify your email.',
+                    registrationId: existingRequest.id,
+                    registrationRequestId: existingRequest.id,
+                    email: existingRequest.email,
+                };
+                if (process.env.NODE_ENV !== 'production') {
+                    response.verificationCode = otp;
+                    response.message =
+                        'Registration request submitted. Use the verification code below in development mode.';
+                }
+                await transaction?.commit();
+                return response;
             }
-            return response;
+            catch (error) {
+                await transaction?.rollback();
+                throw error;
+            }
         }
         const otp = password_util_1.PasswordUtil.generateOTP();
         const otpHash = await password_util_1.PasswordUtil.hashPassword(otp);
         try {
-            const registrationRequest = await registration_request_model_1.RegistrationRequest.create({
-                ...registerDto,
-                email,
-                verificationCode: otpHash,
-                status: registration_request_model_1.RegistrationStatus.PENDING,
-                otpResendCount: 0,
-                lastOtpSentAt: new Date(),
-            });
-            const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
-            const response = {
-                message: 'Registration request submitted. Please verify your email.',
-                registrationId: registrationRequest.id,
-                registrationRequestId: registrationRequest.id,
-                email: registrationRequest.email,
-            };
-            if (process.env.NODE_ENV !== 'production') {
-                response.verificationCode = otp;
-                response.message =
-                    'Registration request submitted. Use the verification code below in development mode.';
-            }
-            if (!otpSent) {
-                if (process.env.NODE_ENV !== 'production') {
-                    return response;
+            const transaction = typeof this.sequelize?.transaction === 'function'
+                ? await this.sequelize.transaction()
+                : undefined;
+            try {
+                const registrationRequest = await registration_request_model_1.RegistrationRequest.create({
+                    ...registerDto,
+                    email,
+                    verificationCode: otpHash,
+                    status: registration_request_model_1.RegistrationStatus.PENDING,
+                    otpResendCount: 0,
+                    lastOtpSentAt: new Date(),
+                }, transaction ? { transaction } : undefined);
+                const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
+                if (!otpSent) {
+                    throw new common_1.BadRequestException('Unable to send verification email at the moment. Please try again later.');
                 }
-                throw new common_1.BadRequestException('Unable to send verification email at the moment. Please try again later.');
+                const response = {
+                    message: 'Registration request submitted. Please verify your email.',
+                    registrationId: registrationRequest.id,
+                    registrationRequestId: registrationRequest.id,
+                    email: registrationRequest.email,
+                };
+                if (process.env.NODE_ENV !== 'production') {
+                    response.verificationCode = otp;
+                    response.message =
+                        'Registration request submitted. Use the verification code below in development mode.';
+                }
+                await transaction?.commit();
+                return response;
             }
-            return response;
+            catch (error) {
+                await transaction?.rollback();
+                if (error?.name === 'SequelizeUniqueConstraintError') {
+                    throw new common_1.ConflictException('This email or phone number is already registered.');
+                }
+                throw error;
+            }
         }
         catch (error) {
             if (error?.name === 'SequelizeUniqueConstraintError') {
-                throw new common_1.ConflictException('This email already has an active registration request.');
+                throw new common_1.ConflictException('This email or phone number is already registered.');
             }
             throw error;
         }
@@ -1818,22 +1843,24 @@ let AuthService = class AuthService {
         }
         const otp = password_util_1.PasswordUtil.generateOTP();
         const otpHash = await password_util_1.PasswordUtil.hashPassword(otp);
-        await registrationRequest.update({
-            verificationCode: otpHash,
-            otpResendCount: attemptCount + 1,
-            lastOtpSentAt: new Date(),
-        });
-        const otpSent = await this.emailService.sendOTPEmail(normalizedEmail, otp, registrationRequest.name);
-        if (process.env.NODE_ENV !== 'production') {
-            return {
-                message: 'A new OTP was generated. Use the code below in development mode.',
-                email: normalizedEmail,
-                verificationCode: otp,
-                cooldownSeconds: Math.ceil(this.getResendDelayMs(attemptCount + 1) / 1000),
-            };
+        const transaction = typeof this.sequelize?.transaction === 'function'
+            ? await this.sequelize.transaction()
+            : undefined;
+        try {
+            const otpSent = await this.emailService.sendOTPEmail(normalizedEmail, otp, registrationRequest.name);
+            if (!otpSent) {
+                throw new common_1.BadRequestException('Unable to send a new verification email right now. Please try again later.');
+            }
+            await registrationRequest.update({
+                verificationCode: otpHash,
+                otpResendCount: attemptCount + 1,
+                lastOtpSentAt: new Date(),
+            }, transaction ? { transaction } : undefined);
+            await transaction?.commit();
         }
-        if (!otpSent && process.env.NODE_ENV === 'production') {
-            throw new common_1.BadRequestException('Unable to send a new verification email right now. Please try again later.');
+        catch (error) {
+            await transaction?.rollback();
+            throw error;
         }
         return {
             message: 'A new verification code has been sent to your email.',
@@ -1936,7 +1963,7 @@ let AuthService = class AuthService {
         }
     }
     async approveRegistration(approveDto, adminId) {
-        const { email, assignedRole, assignedBadge } = approveDto;
+        const { email, assignedRole, assignedBadge, mfaCode } = approveDto;
         const normalizedAssignedRole = typeof assignedRole === 'string' ? assignedRole.trim() || undefined : assignedRole;
         const resolvedRole = this.getRoleFromBadge(assignedBadge, normalizedAssignedRole ?? account_model_1.AccountRole.GUEST);
         const registrationRequest = await registration_request_model_1.RegistrationRequest.findOne({
@@ -1948,33 +1975,84 @@ let AuthService = class AuthService {
         if (!registrationRequest.emailVerified) {
             throw new common_1.BadRequestException('Email must be verified first');
         }
+        const hasTuBadge = (assignedBadge || '').split(',').map((badge) => badge.trim()).includes('TU');
+        if (hasTuBadge) {
+            const admin = await account_model_1.Account.findByPk(adminId);
+            if (!admin) {
+                throw new common_1.NotFoundException('Approving administrator not found');
+            }
+            if (!mfaCode) {
+                const otp = password_util_1.PasswordUtil.generateOTP(6);
+                const otpHash = await password_util_1.PasswordUtil.hashPassword(otp);
+                const otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+                const otpSent = await this.emailService.sendAdminApprovalOTPEmail(admin.email, otp, admin.fullName || admin.name);
+                if (!otpSent) {
+                    throw new common_1.BadRequestException('Unable to send the TU approval OTP. Please try again later.');
+                }
+                await registrationRequest.update({ approvalOtpHash: otpHash, approvalOtpExpiresAt: otpExpiresAt });
+                return {
+                    message: 'Approval OTP sent to the administrator email.',
+                    requiresMFA: true,
+                    mfaExpiration: otpExpiresAt,
+                };
+            }
+            if (!registrationRequest.approvalOtpHash || !registrationRequest.approvalOtpExpiresAt) {
+                throw new common_1.BadRequestException('Request an approval OTP before continuing.');
+            }
+            if (new Date(registrationRequest.approvalOtpExpiresAt) < new Date()) {
+                throw new common_1.BadRequestException('Approval OTP has expired. Request a new OTP.');
+            }
+            if (!(await password_util_1.PasswordUtil.comparePassword(mfaCode.trim(), registrationRequest.approvalOtpHash))) {
+                throw new common_1.UnauthorizedException('Invalid approval OTP.');
+            }
+        }
         const temporaryPassword = password_util_1.PasswordUtil.generateTemporaryPassword();
         const hashedPassword = await password_util_1.PasswordUtil.hashPassword(temporaryPassword);
-        const account = await account_model_1.Account.create({
-            name: registrationRequest.name,
-            fullName: registrationRequest.fullName,
-            email: registrationRequest.email,
-            phoneNumber: registrationRequest.phoneNumber,
-            birthday: registrationRequest.birthday,
-            gender: registrationRequest.gender,
-            parentName: registrationRequest.parentName,
-            password: hashedPassword,
-            role: resolvedRole,
-            badge: assignedBadge,
-            status: account_model_1.AccountStatus.PENDING,
-        });
-        await registrationRequest.update({
-            status: registration_request_model_1.RegistrationStatus.APPROVED,
-            assignedRole: resolvedRole,
-            assignedBadge,
-            approvedBy: adminId,
-            approvedAt: new Date(),
-        });
-        const temporaryPasswordSent = await this.emailService.sendTemporaryPasswordEmail(email, temporaryPassword, registrationRequest.fullName);
-        if (!temporaryPasswordSent && process.env.NODE_ENV === 'production') {
-            throw new common_1.BadRequestException('Registration was approved, but the temporary password email could not be sent. Please contact support.');
+        const transaction = typeof this.sequelize?.transaction === 'function'
+            ? await this.sequelize.transaction()
+            : undefined;
+        let account;
+        let temporaryPasswordSent;
+        try {
+            const accountData = {
+                name: registrationRequest.name,
+                fullName: registrationRequest.fullName,
+                email: registrationRequest.email,
+                phoneNumber: registrationRequest.phoneNumber,
+                birthday: registrationRequest.birthday,
+                gender: registrationRequest.gender,
+                parentName: registrationRequest.parentName,
+                password: hashedPassword,
+                role: resolvedRole,
+                badge: assignedBadge,
+                status: account_model_1.AccountStatus.PENDING,
+            };
+            account = transaction
+                ? await account_model_1.Account.create(accountData, { transaction })
+                : await account_model_1.Account.create(accountData);
+            await registrationRequest.update({
+                status: registration_request_model_1.RegistrationStatus.APPROVED,
+                assignedRole: resolvedRole,
+                assignedBadge,
+                approvedBy: adminId,
+                approvedAt: new Date(),
+                approvalOtpHash: null,
+                approvalOtpExpiresAt: null,
+            }, transaction ? { transaction } : undefined);
+            temporaryPasswordSent = await this.emailService.sendTemporaryPasswordEmail(email, temporaryPassword, registrationRequest.fullName);
+            if (!temporaryPasswordSent) {
+                throw new common_1.BadRequestException('Registration was not completed because the temporary password email could not be sent.');
+            }
+            await registrationRequest.destroy(transaction ? { transaction } : undefined);
+            await transaction?.commit();
         }
-        await registrationRequest.destroy();
+        catch (error) {
+            await transaction?.rollback();
+            if (error?.name === 'SequelizeUniqueConstraintError') {
+                throw new common_1.ConflictException('This email or phone number is already registered.');
+            }
+            throw error;
+        }
         return {
             message: temporaryPasswordSent
                 ? 'Registration approved. Temporary password sent to email.'
@@ -1992,19 +2070,27 @@ let AuthService = class AuthService {
         if (!registrationRequest) {
             throw new common_1.NotFoundException('Registration request not found');
         }
-        await registrationRequest.update({
-            status: registration_request_model_1.RegistrationStatus.REJECTED,
-            rejectionReason,
-        });
         const rejectionEmailSent = await this.emailService.sendRegistrationRejectionEmail(email, registrationRequest.fullName, rejectionReason);
-        if (!rejectionEmailSent && process.env.NODE_ENV === 'production') {
+        if (!rejectionEmailSent) {
             throw new common_1.BadRequestException('Registration was rejected, but the notification email could not be sent.');
         }
-        await registrationRequest.destroy();
+        const transaction = typeof this.sequelize?.transaction === 'function'
+            ? await this.sequelize.transaction()
+            : undefined;
+        try {
+            await registrationRequest.update({
+                status: registration_request_model_1.RegistrationStatus.REJECTED,
+                rejectionReason,
+            }, transaction ? { transaction } : undefined);
+            await registrationRequest.destroy(transaction ? { transaction } : undefined);
+            await transaction?.commit();
+        }
+        catch (error) {
+            await transaction?.rollback();
+            throw error;
+        }
         return {
-            message: rejectionEmailSent
-                ? 'Registration rejected. Notification sent to user.'
-                : 'Registration rejected. Notification could not be delivered but the rejection was recorded.',
+            message: 'Registration rejected. Notification sent to user.',
         };
     }
     async login(loginDto) {

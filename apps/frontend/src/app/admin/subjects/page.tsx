@@ -31,6 +31,7 @@ export default function SubjectManagementPage() {
   const [lessons, setLessons] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [alert, setAlert] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
   const [previewLesson, setPreviewLesson] = useState<{ lessonId: string; title: string; url: string } | null>(null);
   const [youtubePlayer, setYoutubePlayer] = useState<{ title: string; url: string } | null>(null);
@@ -119,29 +120,59 @@ export default function SubjectManagementPage() {
       return;
     }
 
-    if (lessonForm.week && totalLessonWeeks + lessonWeeks > 20) {
+    const otherLessonWeeks = lessons.reduce((total, lesson) => {
+      if (lesson.id === editingLessonId) return total;
+      const parsed = Number(String(lesson.week ?? '').trim());
+      return total + (Number.isInteger(parsed) && parsed > 0 ? parsed : 0);
+    }, 0);
+    if (lessonForm.week && otherLessonWeeks + lessonWeeks > 20) {
       setAlert({ type: 'error', message: `This curriculum has ${remainingWeeks} weeks remaining. Please reduce the week value to stay within the 20-week limit.` });
       return;
     }
 
     setIsSaving(true);
     try {
-      await authApi.admin.createCurriculumLesson(selectedSubjectId, {
+      const lessonData = {
         title: lessonForm.title.trim(),
         source: lessonForm.source.trim(),
         description: lessonForm.description.trim() || undefined,
         week: lessonForm.week.trim() || undefined,
         file: lessonForm.file || undefined,
-      });
+      };
+      if (editingLessonId) {
+        await authApi.admin.updateCurriculumLesson(selectedSubjectId, editingLessonId, lessonData);
+      } else {
+        await authApi.admin.createCurriculumLesson(selectedSubjectId, lessonData);
+      }
       setLessonForm({ title: '', source: '', description: '', week: '', file: null });
+      setEditingLessonId(null);
       setFileInputKey((key) => key + 1);
-      setAlert({ type: 'success', message: 'Lesson added successfully.' });
+      setAlert({ type: 'success', message: editingLessonId ? 'Lesson updated successfully.' : 'Lesson added successfully.' });
       await loadSubjectDetails(selectedSubjectId);
     } catch (error: any) {
       setAlert({ type: 'error', message: error.message || 'Failed to add lesson.' });
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const startEditingLesson = (lesson: any) => {
+    setEditingLessonId(lesson.id);
+    setLessonForm({
+      title: lesson.title || '',
+      source: lesson.source || '',
+      description: lesson.description || '',
+      week: lesson.week || '',
+      file: null,
+    });
+    setFileInputKey((key) => key + 1);
+    setAlert(null);
+  };
+
+  const cancelEditingLesson = () => {
+    setEditingLessonId(null);
+    setLessonForm({ title: '', source: '', description: '', week: '', file: null });
+    setFileInputKey((key) => key + 1);
   };
 
   const handleLessonFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -233,7 +264,10 @@ export default function SubjectManagementPage() {
         {selectedSubjectId && (
           <div className="grid gap-6 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1.2fr)]">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm lg:sticky lg:top-6 lg:self-start">
-              <h3 className="mb-4 text-lg font-semibold text-[var(--foreground)]">Tambah Materi</h3>
+              <div className="mb-4 flex items-center justify-between gap-3">
+                <h3 className="text-lg font-semibold text-[var(--foreground)]">{editingLessonId ? 'Edit Materi' : 'Tambah Materi'}</h3>
+                {editingLessonId && <button type="button" onClick={cancelEditingLesson} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--foreground)]">Batal edit</button>}
+              </div>
               <form onSubmit={handleSubmitLesson} className="space-y-3">
                 <Input
                   label="Judul Materi"
@@ -294,7 +328,7 @@ export default function SubjectManagementPage() {
                   />
                 </div>
                 <div className="flex justify-end">
-                  <Button type="submit" isLoading={isSaving}>Tambah Materi</Button>
+                  <Button type="submit" isLoading={isSaving}>{editingLessonId ? 'Simpan Perubahan' : 'Tambah Materi'}</Button>
                 </div>
               </form>
             </div>
@@ -315,16 +349,20 @@ export default function SubjectManagementPage() {
                             <button
                               type="button"
                               onClick={() => setYoutubePlayer({ title: lesson.title, url: lesson.source })}
-                              className="mt-2 inline-block break-all text-xs text-blue-600 hover:underline"
+                              className="mt-2 inline-flex items-center gap-2 rounded-lg border border-cyan-400/40 bg-cyan-400/10 px-3 py-1.5 text-xs font-semibold text-cyan-700 shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-400 hover:bg-cyan-400/20"
+                              aria-label={`Putar video ${lesson.title}`}
                             >
-                              ▶ {lesson.source}
+                              <span aria-hidden="true">▶</span> Putar video
                             </button>
                           )}
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
+                          <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={() => startEditingLesson(lesson)}>
+                            Edit
+                          </Button>
                           {lesson.fileId && (
-                            <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={() => void openPreview(lesson)}>
-                              Pratinjau
+                            <Button type="button" variant="secondary" className="px-2 py-1 text-xs" onClick={() => void openPreview(lesson)} aria-label={`Buka PDF ${lesson.title}`}>
+                              <span aria-hidden="true">↗</span> PDF
                             </Button>
                           )}
                           <Button type="button" variant="danger" className="px-2 py-1 text-xs" onClick={() => void handleDeleteLesson(lesson.id)}>
@@ -344,7 +382,7 @@ export default function SubjectManagementPage() {
 
       {previewLesson && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+          <div className="flex h-[min(90vh,820px)] w-[min(94vw,1180px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--foreground)]">PDF Preview</h3>
@@ -358,11 +396,11 @@ export default function SubjectManagementPage() {
                 ×
               </button>
             </div>
-            <div className="bg-[var(--background)] p-3">
+            <div className="min-h-0 flex-1 bg-[var(--background)] p-3">
               <iframe
                 src={previewLesson.url}
                 title={previewLesson.title}
-                className="h-[70vh] w-full rounded"
+                className="h-full min-h-[420px] w-full rounded"
               />
             </div>
           </div>
@@ -371,7 +409,7 @@ export default function SubjectManagementPage() {
 
       {youtubePlayer && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
-          <div className="w-full max-w-5xl overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
+          <div className="flex h-[min(90vh,760px)] w-[min(94vw,1100px)] flex-col overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl">
             <div className="flex items-center justify-between border-b border-[var(--border)] p-4">
               <div>
                 <h3 className="text-lg font-semibold text-[var(--foreground)]">YouTube Video</h3>
@@ -385,17 +423,15 @@ export default function SubjectManagementPage() {
                 ×
               </button>
             </div>
-            <div className="bg-[var(--background)] p-3">
+            <div className="min-h-0 flex-1 bg-[var(--background)] p-3">
               {extractYoutubeId(youtubePlayer.url) ? (
                 <iframe
-                  width="100%"
-                  height="500"
                   src={`https://www.youtube.com/embed/${extractYoutubeId(youtubePlayer.url)}`}
                   title={youtubePlayer.title}
                   frameBorder="0"
                   allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                   allowFullScreen
-                  className="rounded"
+                  className="h-full min-h-[300px] w-full rounded"
                 />
               ) : (
                 <div className="flex h-96 items-center justify-center text-[var(--muted)]">

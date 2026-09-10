@@ -17,6 +17,7 @@ class ApproveRegistrationDto {
     email;
     assignedRole;
     assignedBadge;
+    mfaCode;
 }
 exports.ApproveRegistrationDto = ApproveRegistrationDto;
 __decorate([
@@ -35,6 +36,11 @@ __decorate([
     (0, class_validator_1.IsString)(),
     __metadata("design:type", String)
 ], ApproveRegistrationDto.prototype, "assignedBadge", void 0);
+__decorate([
+    (0, class_validator_1.IsOptional)(),
+    (0, class_validator_1.IsString)(),
+    __metadata("design:type", String)
+], ApproveRegistrationDto.prototype, "mfaCode", void 0);
 class RejectRegistrationDto {
     email;
     rejectionReason;

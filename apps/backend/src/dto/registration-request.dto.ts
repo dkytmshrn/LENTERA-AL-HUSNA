@@ -16,6 +16,10 @@ export class ApproveRegistrationDto {
   @IsOptional()
   @IsString()
   assignedBadge?: string;
+
+  @IsOptional()
+  @IsString()
+  mfaCode?: string;
 }
 
 export class RejectRegistrationDto {

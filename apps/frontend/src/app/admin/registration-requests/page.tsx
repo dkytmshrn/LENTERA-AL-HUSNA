@@ -24,6 +24,7 @@ export default function RegistrationRequestsPage() {
   const [showModal, setShowModal] = useState(false);
   const [modalMode, setModalMode] = useState<'approve' | 'reject'>('approve');
   const [assignedBadge, setAssignedBadge] = useState('');
+  const [approvalOtp, setApprovalOtp] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -74,6 +75,7 @@ export default function RegistrationRequestsPage() {
     setSelectedRequest(request);
     setModalMode('approve');
     setAssignedBadge('');
+    setApprovalOtp('');
     setShowModal(true);
   };
 
@@ -94,7 +96,17 @@ export default function RegistrationRequestsPage() {
     setIsSubmitting(true);
     try {
       if (modalMode === 'approve') {
-        await authApi.admin.approveRegistration(selectedRequest.email, '', assignedBadge);
+        const result = await authApi.admin.approveRegistration(
+          selectedRequest.email,
+          '',
+          assignedBadge,
+          approvalOtp || undefined,
+        ) as { requiresMFA?: boolean };
+        if (result.requiresMFA) {
+          setAlert({ type: 'success', message: 'OTP sent to the administrator email. Enter it to continue.' });
+          setApprovalOtp('');
+          return;
+        }
         setAlert({ type: 'success', message: 'Registration approved successfully' });
       } else {
         await authApi.admin.rejectRegistration(selectedRequest.email, rejectionReason || 'No reason provided');
@@ -269,7 +281,7 @@ export default function RegistrationRequestsPage() {
             </div>
 
             {modalMode === 'approve' ? (
-              <div className="mb-4">
+              <div className="mb-4 space-y-4">
                 <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
                   Assign Badge
                 </label>
@@ -285,6 +297,21 @@ export default function RegistrationRequestsPage() {
                     </option>
                   ))}
                 </select>
+                {assignedBadge === 'TU' && (
+                  <div>
+                    <label className="block text-sm font-medium text-[var(--foreground)] mb-2">
+                      Administrator OTP
+                    </label>
+                    <input
+                      value={approvalOtp}
+                      onChange={(e) => setApprovalOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                      inputMode="numeric"
+                      maxLength={6}
+                      placeholder="Enter the OTP sent to your email"
+                      className="w-full px-4 py-2 border border-[var(--border)] rounded bg-[var(--background)] text-[var(--foreground)]"
+                    />
+                  </div>
+                )}
               </div>
             ) : (
               <div className="mb-4">

@@ -128,6 +128,16 @@ export class RegistrationRequest extends Model {
   })
   declare emailVerified: boolean;
 
+  @Column({
+    type: DataType.STRING(255),
+  })
+  declare approvalOtpHash: string;
+
+  @Column({
+    type: DataType.DATE,
+  })
+  declare approvalOtpExpiresAt: Date;
+
   @CreatedAt
   declare createdAt: Date;
 

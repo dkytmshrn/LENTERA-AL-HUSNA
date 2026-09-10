@@ -3,6 +3,7 @@ export declare class ApproveRegistrationDto {
     email: string;
     assignedRole?: AccountRole;
     assignedBadge?: string;
+    mfaCode?: string;
 }
 export declare class RejectRegistrationDto {
     email: string;

@@ -25,6 +25,8 @@ export declare class RegistrationRequest extends Model {
     otpResendCount: number;
     lastOtpSentAt: Date;
     emailVerified: boolean;
+    approvalOtpHash: string;
+    approvalOtpExpiresAt: Date;
     createdAt: Date;
     updatedAt: Date;
 }

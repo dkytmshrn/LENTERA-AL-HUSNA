@@ -99,6 +99,7 @@ __decorate([
     __metadata("design:type", String)
 ], Account.prototype, "password", void 0);
 __decorate([
+    sequelize_typescript_1.Unique,
     (0, sequelize_typescript_1.Column)({
         type: sequelize_typescript_1.DataType.STRING(20),
     }),
