@@ -42,12 +42,12 @@ export class AuthService {
   ) {}
 
   private getGeminiUrl(apiKey: string): string {
-    const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+    const model = process.env.GEMINI_MODEL?.trim() || 'gemini-3.6-flash';
     return `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   }
 
   private getDefaultGeminiUrl(apiKey: string): string {
-    return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+    return `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
   }
 
   private async getGeminiError(response: Response): Promise<string> {
