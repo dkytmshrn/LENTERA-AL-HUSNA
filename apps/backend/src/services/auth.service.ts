@@ -46,6 +46,10 @@ export class AuthService {
     return `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
   }
 
+  private getDefaultGeminiUrl(apiKey: string): string {
+    return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(apiKey)}`;
+  }
+
   private async getGeminiError(response: Response): Promise<string> {
     const body = await response.text();
     try {
@@ -353,7 +357,11 @@ export class AuthService {
     const prompt = `Buat latihan belajar untuk siswa MTs Indonesia berdasarkan materi berikut. Buat 5 sampai 10 soal campuran pilihan ganda dan esai. Jangan simpan latihan ini.\nJudul materi: ${lesson.title}\nDeskripsi: ${lesson.description || ''}\nSumber: ${lesson.source || 'PDF'}\nBalas HANYA JSON valid: {"questions":[{"type":"multiple_choice"|"essay","questionText":"...","options":["..."],"correctOptionIndex":0,"answer":"...","points":10}]}. Setiap soal harus memiliki poin dan jawaban acuan.`;
     let response: Response;
     try {
-      response = await fetch(this.getGeminiUrl(apiKey), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, responseMimeType: 'application/json' } }) });
+      const requestBody = { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, responseMimeType: 'application/json' } }) };
+      response = await fetch(this.getGeminiUrl(apiKey), requestBody);
+      if (!response.ok && process.env.GEMINI_MODEL?.trim() && response.status === 404) {
+        response = await fetch(this.getDefaultGeminiUrl(apiKey), requestBody);
+      }
     } catch {
       throw new ConflictException('AI latihan tidak dapat dihubungi. Periksa konfigurasi Gemini dan coba lagi.');
     }
@@ -366,8 +374,16 @@ export class AuthService {
     } catch {
       throw new ConflictException('AI mengembalikan format latihan yang tidak valid. Silakan coba lagi.');
     }
-    if (!Array.isArray(parsed.questions) || parsed.questions.length < 5) throw new ConflictException('AI menghasilkan latihan yang tidak lengkap.');
-    return { lesson: { id: lesson.id, title: lesson.title }, questions: parsed.questions.slice(0, 10) };
+    if (!Array.isArray(parsed.questions) || parsed.questions.length === 0) {
+      throw new ConflictException('AI tidak menghasilkan soal latihan yang valid. Silakan coba lagi.');
+    }
+    const questions = parsed.questions
+      .filter((question: any) => question && typeof question.questionText === 'string' && question.questionText.trim())
+      .slice(0, 10);
+    if (questions.length === 0) {
+      throw new ConflictException('AI tidak menghasilkan soal latihan yang valid. Silakan coba lagi.');
+    }
+    return { lesson: { id: lesson.id, title: lesson.title }, questions };
   }
 
   async gradeLessonPractice(questions: any[], answers: Record<number, string>): Promise<any> {

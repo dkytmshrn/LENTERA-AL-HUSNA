@@ -87,6 +87,10 @@ export class HttpExceptionFilter implements ExceptionFilter {
       return 'This request has expired. Please try again.';
     }
 
+    if (normalized.toLowerCase().includes('ai ') || normalized.toLowerCase().includes('gemini')) {
+      return normalized;
+    }
+
     return 'Request failed';
   }
 }
