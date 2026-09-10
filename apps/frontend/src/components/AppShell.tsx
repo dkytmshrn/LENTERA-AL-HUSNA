@@ -198,7 +198,7 @@ export function AppShell({
                 onClick={() => setMenuOpen(false)}
                 className={`text-xl font-bold text-blue-600 transition-all duration-300 ${sidebarCollapsed ? 'lg:opacity-0 lg:hidden' : ''}`}
               >
-                <span className="flex items-center gap-2"><Image src={logo} alt="Al-Husna logo" width={32} height={32} className="h-8 w-8 object-contain" priority /><span className="leading-tight"><span className="block">LENTERA</span><span className="block text-[10px] tracking-[.18em] text-[var(--muted)]">AL HUSNA</span></span></span>
+                <span className="flex items-center gap-2"><Image src={logo} alt="Al-Husna logo" width={32} height={32} className="h-8 w-8 object-contain" priority unoptimized /><span className="leading-tight"><span className="block">LENTERA</span><span className="block text-[10px] tracking-[.18em] text-[var(--muted)]">AL HUSNA</span></span></span>
               </Link>
 
               <button

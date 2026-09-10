@@ -94,7 +94,7 @@ export function TopNav() {
       <div className="max-w-7xl mx-auto px-4 py-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center">
           <Link href={isAuthenticated ? (userRole === 'Principal' ? '/principal/reports' : '/dashboard') : '/'} className="text-xl font-bold text-blue-600 flex items-center gap-2">
-            <Image src={logo} alt="Al-Husna logo" width={40} height={40} className="h-10 w-10 object-contain" priority />
+            <Image src={logo} alt="Al-Husna logo" width={40} height={40} className="h-10 w-10 object-contain" priority unoptimized />
             <span className="leading-tight"><span className="block">LENTERA</span><span className="block text-[10px] tracking-[.18em] text-[var(--muted)]">AL HUSNA</span></span>
           </Link>
 
