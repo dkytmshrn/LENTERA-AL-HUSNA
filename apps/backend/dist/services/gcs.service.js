@@ -27,10 +27,20 @@ let GcsService = class GcsService {
         this.maxFileSizeBytes = (Number(process.env.MAX_FILE_SIZE_MB) || 10) * 1024 * 1024;
         this.maxTotalStorageBytes = (Number(process.env.MAX_TOTAL_STORAGE_GB) || 4.9) * 1024 * 1024 * 1024;
         try {
-            this.storage = new storage_1.Storage({
-                projectId: process.env.GCS_PROJECT_ID,
-                keyFilename: process.env.GCS_KEY_FILENAME || './gcs-key.json',
-            });
+            const clientEmail = process.env.GCS_CLIENT_EMAIL;
+            const privateKey = process.env.GCS_PRIVATE_KEY?.replace(/\\n/g, '\n');
+            this.storage = clientEmail && privateKey
+                ? new storage_1.Storage({
+                    projectId: process.env.GCS_PROJECT_ID,
+                    credentials: {
+                        client_email: clientEmail,
+                        private_key: privateKey,
+                    },
+                })
+                : new storage_1.Storage({
+                    projectId: process.env.GCS_PROJECT_ID,
+                    keyFilename: process.env.GCS_KEY_FILENAME || './gcs-key.json',
+                });
         }
         catch (error) {
             console.error('Failed to initialize Google Cloud Storage:', error);
