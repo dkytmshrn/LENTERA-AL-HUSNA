@@ -41,6 +41,21 @@ export class AuthService {
     private readonly gcsService: GcsService,
   ) {}
 
+  private getGeminiUrl(apiKey: string): string {
+    const model = process.env.GEMINI_MODEL?.trim() || 'gemini-2.5-flash';
+    return `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  }
+
+  private async getGeminiError(response: Response): Promise<string> {
+    const body = await response.text();
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string } };
+      return parsed.error?.message || `Gemini returned HTTP ${response.status}`;
+    } catch {
+      return `Gemini returned HTTP ${response.status}`;
+    }
+  }
+
   private getImageExtension(mimeType?: string): string {
     if (mimeType === 'image/jpeg') return 'jpg';
     if (mimeType === 'image/webp') return 'webp';
@@ -241,8 +256,8 @@ export class AuthService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new ConflictException('AI pembuat soal belum dikonfigurasi.');
     const prompt = `Buat soal ujian untuk MTs Indonesia. Mata pelajaran: ${body.subjectName || 'umum'}. Tingkat: ${body.gradeLevel || '7'}. Buat ${multipleChoiceCount} soal pilihan ganda dan ${essayCount} soal esai. Balas HANYA JSON valid {"questions":[{"type":"multiple_choice"|"essay","questionText":"...","options":["..."],"correctOptionIndex":0,"answer":"...","points":10}]}. Setiap soal harus memiliki jawaban acuan dan poin.`;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, responseMimeType: 'application/json' } }) });
-    if (!response.ok) throw new ConflictException('AI belum dapat membuat soal.');
+    const response = await fetch(this.getGeminiUrl(apiKey), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.3, responseMimeType: 'application/json' } }) });
+    if (!response.ok) throw new ConflictException(`AI belum dapat membuat soal: ${await this.getGeminiError(response)}`);
     const payload = await response.json() as any;
     const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     const parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim());
@@ -336,11 +351,21 @@ export class AuthService {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) throw new ConflictException('AI latihan belum dikonfigurasi.');
     const prompt = `Buat latihan belajar untuk siswa MTs Indonesia berdasarkan materi berikut. Buat 5 sampai 10 soal campuran pilihan ganda dan esai. Jangan simpan latihan ini.\nJudul materi: ${lesson.title}\nDeskripsi: ${lesson.description || ''}\nSumber: ${lesson.source || 'PDF'}\nBalas HANYA JSON valid: {"questions":[{"type":"multiple_choice"|"essay","questionText":"...","options":["..."],"correctOptionIndex":0,"answer":"...","points":10}]}. Setiap soal harus memiliki poin dan jawaban acuan.`;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, responseMimeType: 'application/json' } }) });
-    if (!response.ok) throw new ConflictException('AI belum dapat membuat latihan. Silakan coba lagi.');
+    let response: Response;
+    try {
+      response = await fetch(this.getGeminiUrl(apiKey), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.4, responseMimeType: 'application/json' } }) });
+    } catch {
+      throw new ConflictException('AI latihan tidak dapat dihubungi. Periksa konfigurasi Gemini dan coba lagi.');
+    }
+    if (!response.ok) throw new ConflictException(`AI belum dapat membuat latihan: ${await this.getGeminiError(response)}`);
     const payload = await response.json() as any;
     const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
-    const parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim());
+    let parsed: any;
+    try {
+      parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim());
+    } catch {
+      throw new ConflictException('AI mengembalikan format latihan yang tidak valid. Silakan coba lagi.');
+    }
     if (!Array.isArray(parsed.questions) || parsed.questions.length < 5) throw new ConflictException('AI menghasilkan latihan yang tidak lengkap.');
     return { lesson: { id: lesson.id, title: lesson.title }, questions: parsed.questions.slice(0, 10) };
   }
@@ -359,8 +384,8 @@ export class AuthService {
       studentAnswer: String(answers[index] || '').slice(0, 4000),
     }));
     const prompt = `Anda adalah guru yang menilai latihan siswa MTs. Nilai pilihan ganda dan esai berdasarkan makna sebenarnya, bukan pencocokan string. Untuk esai, jawaban dengan notasi atau urutan berbeda tetap benar jika makna matematis/faktualnya setara. Gunakan jawaban acuan, pertanyaan, dan opsi sebagai konteks. Berikan persentase kecocokan makna 0-100 untuk setiap soal dan hitung awardedPoints = points * percentage / 100. Jangan menilai jawaban kosong sebagai benar. Balas HANYA JSON valid: {"results":[{"index":0,"correct":true,"matchPercentage":100,"awardedPoints":10,"explanation":"..."}]}. Data latihan:\n${JSON.stringify(safeQuestions)}`;
-    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }) });
-    if (!response.ok) throw new ConflictException('AI belum dapat memeriksa jawaban latihan.');
+    const response = await fetch(this.getGeminiUrl(apiKey), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }) });
+    if (!response.ok) throw new ConflictException(`AI belum dapat memeriksa jawaban latihan: ${await this.getGeminiError(response)}`);
     const payload = await response.json() as any;
     const text = payload?.candidates?.[0]?.content?.parts?.[0]?.text || '{}';
     const parsed = JSON.parse(text.replace(/^```json\s*|\s*```$/g, '').trim());
@@ -687,7 +712,7 @@ export class AuthService {
     ].join('\n');
 
     try {
-      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-3.6-flash:generateContent?key=${encodeURIComponent(apiKey)}`, {
+      const response = await fetch(this.getGeminiUrl(apiKey), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } }),
