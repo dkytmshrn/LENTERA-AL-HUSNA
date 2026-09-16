@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   ConflictException,
   NotFoundException,
+  ServiceUnavailableException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Sequelize } from 'sequelize-typescript';
@@ -550,12 +551,37 @@ export class AuthService {
     if (!exam.examDate || !exam.examStartTime || !exam.examEndTime) {
       throw new BadRequestException('Examination date, start time, and end time must be configured');
     }
-    const start = new Date(`${exam.examDate}T${exam.examStartTime}`);
-    const end = new Date(`${exam.examDate}T${exam.examEndTime}`);
+    const start = this.parseExamDateTime(exam.examDate, exam.examStartTime);
+    const end = this.parseExamDateTime(exam.examDate, exam.examEndTime);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
       throw new BadRequestException('Examination time window is invalid');
     }
     return { start, end };
+  }
+
+  private parseExamDateTime(examDate: string, examTime: string): Date {
+    const timeZone = process.env.EXAM_TIMEZONE || 'Asia/Jakarta';
+    const source = new Date(`${examDate}T${examTime}Z`);
+    const parts = new Intl.DateTimeFormat('en-US', {
+      timeZone,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hourCycle: 'h23',
+    }).formatToParts(source);
+    const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+    const zonedAsUtc = Date.UTC(
+      Number(values.year),
+      Number(values.month) - 1,
+      Number(values.day),
+      Number(values.hour),
+      Number(values.minute),
+      Number(values.second),
+    );
+    return new Date(source.getTime() - (zonedAsUtc - source.getTime()));
   }
 
   private validateExamSchedule(examDate?: string, startTime?: string, endTime?: string): void {
@@ -1998,6 +2024,7 @@ export class AuthService {
         ? await this.sequelize.transaction()
         : undefined;
 
+      let transactionCommitted = false;
       try {
         await this.pruneDuplicatePendingRegistrationRequests(email, existingRequest.id, transaction);
         await existingRequest.update({
@@ -2008,9 +2035,12 @@ export class AuthService {
           emailVerified: false,
         }, transaction ? { transaction } : undefined);
 
+        await transaction?.commit();
+        transactionCommitted = true;
+
         const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
         if (!otpSent) {
-          throw new BadRequestException(
+          throw new ServiceUnavailableException(
             'Unable to send verification email at the moment. Please try again later.',
           );
         }
@@ -2028,10 +2058,9 @@ export class AuthService {
           'Registration request submitted. Use the verification code below in development mode.';
       }
 
-        await transaction?.commit();
         return response;
       } catch (error) {
-        await transaction?.rollback();
+        if (!transactionCommitted) await transaction?.rollback();
         throw error;
       }
     }
@@ -2043,6 +2072,7 @@ export class AuthService {
       const transaction = typeof this.sequelize?.transaction === 'function'
         ? await this.sequelize.transaction()
         : undefined;
+      let transactionCommitted = false;
       try {
         const registrationRequest = await RegistrationRequest.create({
           ...registerDto,
@@ -2053,9 +2083,12 @@ export class AuthService {
           lastOtpSentAt: new Date(),
         }, transaction ? { transaction } : undefined);
 
+        await transaction?.commit();
+        transactionCommitted = true;
+
         const otpSent = await this.emailService.sendOTPEmail(email, otp, name);
         if (!otpSent) {
-          throw new BadRequestException(
+          throw new ServiceUnavailableException(
             'Unable to send verification email at the moment. Please try again later.',
           );
         }
@@ -2073,10 +2106,9 @@ export class AuthService {
           'Registration request submitted. Use the verification code below in development mode.';
       }
 
-        await transaction?.commit();
         return response;
       } catch (error: any) {
-        await transaction?.rollback();
+        if (!transactionCommitted) await transaction?.rollback();
         if (error?.name === 'SequelizeUniqueConstraintError') {
           throw new ConflictException('This email or phone number is already registered.');
         }

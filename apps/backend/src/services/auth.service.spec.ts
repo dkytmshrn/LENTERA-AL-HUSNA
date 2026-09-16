@@ -14,6 +14,14 @@ describe('AuthService verifyEmailOTP', () => {
     jest.restoreAllMocks();
   });
 
+  it('interprets examination schedules in the configured school timezone', () => {
+    delete process.env.EXAM_TIMEZONE;
+
+    const window = (service as any).parseExamDateTime('2026-09-17', '10:00:00');
+
+    expect(window.toISOString()).toBe('2026-09-17T03:00:00.000Z');
+  });
+
   it('throws a bad request when the verification code is missing from the stored registration request', async () => {
     jest.spyOn(Account, 'findOne').mockResolvedValue(null);
     jest.spyOn(RegistrationRequest, 'findAll').mockResolvedValue([
