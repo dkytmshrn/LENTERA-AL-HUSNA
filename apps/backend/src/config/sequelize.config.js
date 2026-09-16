@@ -1,5 +1,10 @@
 require('dotenv').config();
 
+const dbPort = Number(process.env.DB_PORT || 5432);
+const useSsl = process.env.DB_SSL === 'true'
+  || dbPort === 6543
+  || process.env.DB_HOST?.includes('supabase.com');
+
 module.exports = {
   development: {
     username: process.env.DB_USERNAME || 'postgres',
@@ -25,7 +30,7 @@ module.exports = {
     host: process.env.DB_HOST,
     port: process.env.DB_PORT || 5432,
     dialect: 'postgres',
-    dialectOptions: process.env.DATABASE_URL || process.env.DB_SSL === 'true'
+    dialectOptions: process.env.DATABASE_URL || useSsl
       ? { ssl: { require: true, rejectUnauthorized: false } }
       : {},
   },

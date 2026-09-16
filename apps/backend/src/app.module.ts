@@ -50,6 +50,9 @@ dotenv.config({ path: rootEnvPath });
       useFactory: async () => {
         const dbPort = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432;
         const databaseUrl = process.env.DATABASE_URL?.trim();
+        const useSsl = process.env.DB_SSL === 'true'
+          || dbPort === 6543
+          || process.env.DB_HOST?.includes('supabase.com');
         const sequelize = new Sequelize(databaseUrl || {
           dialect: 'postgres',
           host: process.env.DB_HOST || 'localhost',
@@ -57,7 +60,7 @@ dotenv.config({ path: rootEnvPath });
           username: process.env.DB_USERNAME || 'postgres',
           password: process.env.DB_PASSWORD,
           database: process.env.DB_NAME || 'lentera-al-husna',
-          ...(process.env.DB_SSL === 'true' ? {
+          ...(useSsl ? {
             dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
           } : {}),
         }, databaseUrl ? {
