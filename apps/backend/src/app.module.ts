@@ -53,22 +53,22 @@ dotenv.config({ path: rootEnvPath });
         const useSsl = process.env.DB_SSL === 'true'
           || dbPort === 6543
           || process.env.DB_HOST?.includes('supabase.com');
-        const sequelize = new Sequelize(databaseUrl || {
-          dialect: 'postgres',
-          host: process.env.DB_HOST || 'localhost',
-          port: dbPort,
-          username: process.env.DB_USERNAME || 'postgres',
-          password: process.env.DB_PASSWORD,
-          database: process.env.DB_NAME || 'lentera-al-husna',
-          ...(useSsl ? {
-            dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
-          } : {}),
-        }, databaseUrl ? {
-          dialect: 'postgres',
-          dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
-        } : {
-          dialect: 'postgres',
-        });
+        const sequelize = databaseUrl
+          ? new Sequelize(databaseUrl, {
+              dialect: 'postgres',
+              dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+            })
+          : new Sequelize({
+              dialect: 'postgres',
+              host: process.env.DB_HOST || 'localhost',
+              port: dbPort,
+              username: process.env.DB_USERNAME || 'postgres',
+              password: process.env.DB_PASSWORD,
+              database: process.env.DB_NAME || 'lentera-al-husna',
+              ...(useSsl ? {
+                dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+              } : {}),
+            });
         sequelize.addModels([
           Account,
           Class,
