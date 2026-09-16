@@ -47,6 +47,19 @@ export class HttpExceptionFilter implements ExceptionFilter {
           }
         : undefined;
 
+    if (status >= HttpStatus.INTERNAL_SERVER_ERROR) {
+      const errorDetails = exception instanceof Error
+        ? { name: exception.name, message: exception.message, stack: exception.stack }
+        : { message: String(exception) };
+      console.error('[HTTP_ERROR]', JSON.stringify({
+        requestId: request.headers['x-request-id'] || request.headers['x-vercel-id'],
+        method: request.method,
+        url: request.originalUrl || request.url,
+        status,
+        ...errorDetails,
+      }));
+    }
+
     response.status(status).json({
       statusCode: status,
       message: isDevelopment ? safeMessage : this.formatMessage(safeMessage),
