@@ -49,16 +49,36 @@ dotenv.config({ path: rootEnvPath });
       provide: Sequelize,
       useFactory: async () => {
         const dbPort = process.env.DB_PORT ? parseInt(process.env.DB_PORT, 10) : 5432;
-        const sequelize = new Sequelize({
+        const databaseUrl = process.env.DATABASE_URL?.trim();
+        const sequelize = new Sequelize(databaseUrl || {
           dialect: 'postgres',
           host: process.env.DB_HOST || 'localhost',
           port: dbPort,
           username: process.env.DB_USERNAME || 'postgres',
           password: process.env.DB_PASSWORD,
           database: process.env.DB_NAME || 'lentera-al-husna',
-          models: [Account, Class, RegistrationRequest, Curriculum, CurriculumLesson, CurriculumExamination, ExaminationQuestion, ExaminationAttempt, Classroom, ClassroomStudent, ClassroomCurriculum],
-          logging: false,
+          ...(process.env.DB_SSL === 'true' ? {
+            dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+          } : {}),
+        }, databaseUrl ? {
+          dialect: 'postgres',
+          dialectOptions: { ssl: { require: true, rejectUnauthorized: false } },
+        } : {
+          dialect: 'postgres',
         });
+        sequelize.addModels([
+          Account,
+          Class,
+          RegistrationRequest,
+          Curriculum,
+          CurriculumLesson,
+          CurriculumExamination,
+          ExaminationQuestion,
+          ExaminationAttempt,
+          Classroom,
+          ClassroomStudent,
+          ClassroomCurriculum,
+        ]);
         await sequelize.authenticate();
         console.log('Database connection established successfully');
         return sequelize;
