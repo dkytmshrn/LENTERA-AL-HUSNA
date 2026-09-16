@@ -8,7 +8,7 @@
             "root": "backend",
             "framework": "nestjs",
             "entrypoint": "dist/main.js",
-            "buildCommand": "npm run build"
+            "buildCommand": "npm run db:migrate && npm run build"
         }
     },
     "rewrites": [

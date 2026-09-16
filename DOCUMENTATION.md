@@ -96,6 +96,8 @@ npm run build:backend
 npm run build:frontend
 ```
 
+The Vercel backend build runs `db:migrate` before compiling the API. Configure the production database variables in Vercel so pending migrations, including registration approval OTP columns, are applied during deployment.
+
 ## 5. Initial Data
 
 Create the bootstrap SysAdmin account:
